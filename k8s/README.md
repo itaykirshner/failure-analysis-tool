@@ -57,7 +57,7 @@ kubectl apply -f k8s/llm-deployment.yaml
 
 Wait for the model to download and service to be ready:
 ```bash
-kubectl wait --for=condition=ready pod -l app=nemotron-mini-4b-gguf -n log-analysis-aiops --timeout=600s
+kubectl wait --for=condition=ready pod -l app=nemotron-mini-4b-gguf -n failure-analysis-tool --timeout=600s
 ```
 
 ### 2. Deploy Application
@@ -70,20 +70,20 @@ kubectl apply -f k8s/app-deployment.yaml
 
 ```bash
 # Check pods
-kubectl get pods -n log-analysis-aiops
+kubectl get pods -n failure-analysis-tool
 
 # Check services
-kubectl get svc -n log-analysis-aiops
+kubectl get svc -n failure-analysis-tool
 
 # Check logs
-kubectl logs -f deployment/log-analysis-aiops -n log-analysis-aiops
+kubectl logs -f deployment/log-analysis-aiops -n failure-analysis-tool
 ```
 
 ### 4. Access the Application
 
 Port-forward to access locally:
 ```bash
-kubectl port-forward -n log-analysis-aiops svc/log-analysis-aiops-service 8000:8000
+kubectl port-forward -n failure-analysis-tool svc/log-analysis-aiops-service 8000:8000
 ```
 
 Then open http://localhost:8000
@@ -102,7 +102,7 @@ Or expose via Ingress/LoadBalancer as needed.
 ### Application
 
 - Minimal Kubernetes permissions (only reads pods/namespaces for health checks)
-- Connects to LLM service via service DNS: `llm-service.log-analysis-aiops.svc.cluster.local`
+- Connects to LLM service via service DNS: `llm-service.failure-analysis-tool.svc.cluster.local`
 - Health check endpoint: `/health`
 
 ## Troubleshooting
@@ -111,23 +111,23 @@ Or expose via Ingress/LoadBalancer as needed.
 
 ```bash
 # Check model download
-kubectl logs -n log-analysis-aiops deployment/nemotron-mini-4b-gguf-deployment -c model-downloader
+kubectl logs -n failure-analysis-tool deployment/nemotron-mini-4b-gguf-deployment -c model-downloader
 
 # Check LLM server
-kubectl logs -n log-analysis-aiops deployment/nemotron-mini-4b-gguf-deployment -c llama-cpp-server
+kubectl logs -n failure-analysis-tool deployment/nemotron-mini-4b-gguf-deployment -c llama-cpp-server
 
 # Check PVC
-kubectl get pvc -n log-analysis-aiops
+kubectl get pvc -n failure-analysis-tool
 ```
 
 ### Application Issues
 
 ```bash
 # Check application logs
-kubectl logs -n log-analysis-aiops deployment/log-analysis-aiops
+kubectl logs -n failure-analysis-tool deployment/log-analysis-aiops
 
 # Check RBAC
-kubectl auth can-i get pods --namespace log-analysis-aiops --as=system:serviceaccount:log-analysis-aiops:log-analysis-aiops
+kubectl auth can-i get pods --namespace failure-analysis-tool --as=system:serviceaccount:log-analysis-aiops:log-analysis-aiops
 ```
 
 ## Resource Requirements

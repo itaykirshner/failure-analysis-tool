@@ -1,19 +1,19 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: log-analysis-aiops
+  name: failure-analysis-tool
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: log-analysis-aiops
-  namespace: log-analysis-aiops
+  namespace: failure-analysis-tool
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: log-analysis-aiops-role
-  namespace: log-analysis-aiops
+  namespace: failure-analysis-tool
 rules:
 # Minimal permissions - we're not reading logs directly from k8s
 # Only need permissions for health checks and service discovery if needed
@@ -28,7 +28,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: log-analysis-aiops-binding
-  namespace: log-analysis-aiops
+  namespace: failure-analysis-tool
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -36,13 +36,13 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: log-analysis-aiops
-  namespace: log-analysis-aiops
+  namespace: failure-analysis-tool
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: log-analysis-aiops
-  namespace: log-analysis-aiops
+  namespace: failure-analysis-tool
   labels:
     app: log-analysis-aiops
 spec:
@@ -70,7 +70,7 @@ spec:
           protocol: TCP
         env:
         - name: LLM_SERVICE_URL
-          value: "http://llm-service.log-analysis-aiops.svc.cluster.local:8000"
+          value: "http://llm-service.failure-analysis-tool.svc.cluster.local:8000"
         - name: KUBERNETES_NAMESPACE
           valueFrom:
             fieldRef:
@@ -113,7 +113,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: log-analysis-aiops-service
-  namespace: log-analysis-aiops
+  namespace: failure-analysis-tool
   labels:
     app: log-analysis-aiops
 spec:
