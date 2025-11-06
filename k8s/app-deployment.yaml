@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: log-analysis-aiops
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: log-analysis-aiops
+  namespace: log-analysis-aiops
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: log-analysis-aiops-role
+  namespace: log-analysis-aiops
+rules:
+# Minimal permissions - we're not reading logs directly from k8s
+# Only need permissions for health checks and service discovery if needed
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: log-analysis-aiops-binding
+  namespace: log-analysis-aiops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: log-analysis-aiops-role
+subjects:
+- kind: ServiceAccount
+  name: log-analysis-aiops
+  namespace: log-analysis-aiops
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-analysis-aiops
+  namespace: log-analysis-aiops
+  labels:
+    app: log-analysis-aiops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: log-analysis-aiops
+  template:
+    metadata:
+      labels:
+        app: log-analysis-aiops
+    spec:
+      serviceAccountName: log-analysis-aiops
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsNonRoot: true
+      containers:
+      - name: api
+        image: PLACEHOLDER_ECR_REGISTRY/failure-analysis-tool/app:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        - name: LLM_SERVICE_URL
+          value: "http://llm-service.log-analysis-aiops.svc.cluster.local:8000"
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: log-analysis-aiops-service
+  namespace: log-analysis-aiops
+  labels:
+    app: log-analysis-aiops
+spec:
+  selector:
+    app: log-analysis-aiops
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+

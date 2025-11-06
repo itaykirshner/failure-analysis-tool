@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kubernetes Log Analysis AIOps</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .section h2 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        
+        .upload-area {
+            border: 2px dashed #3498db;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .upload-area:hover {
+            background: #ecf0f1;
+        }
+        
+        .upload-area.dragover {
+            background: #d5e8f4;
+            border-color: #2980b9;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #2980b9;
+        }
+        
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+        
+        .query-section {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .query-section input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .answer-box {
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 4px;
+        }
+        
+        .mermaid-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        
+        .timeline-container {
+            height: 300px;
+            position: relative;
+        }
+        
+        .pod-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        
+        .pod-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: white;
+        }
+        
+        .pod-card.healthy {
+            border-left: 4px solid #27ae60;
+        }
+        
+        .pod-card.unhealthy {
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .pod-card.degraded {
+            border-left: 4px solid #f39c12;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        .status-healthy {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .status-unhealthy {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .status-degraded {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+        }
+        
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .stat-card h3 {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Kubernetes Log Analysis AIOps</h1>
+            <p>Intelligent log analysis and root cause detection</p>
+        </header>
+        
+        <div class="section">
+            <h2>Upload Log Bundle</h2>
+            <div class="upload-area" id="uploadArea">
+                <p>Drag and drop your .tgz bundle here or click to browse</p>
+                <input type="file" id="fileInput" accept=".tgz,.tar.gz">
+            </div>
+            <button id="analyzeBtn" disabled>Analyze Bundle</button>
+            <div id="uploadStatus"></div>
+        </div>
+        
+        <div id="resultsSection" style="display: none;">
+            <div class="section">
+                <h2>Summary</h2>
+                <div class="summary-stats" id="summaryStats"></div>
+            </div>
+            
+            <div class="section">
+                <h2>Cluster Dependency Graph</h2>
+                <div class="mermaid-container">
+                    <div class="mermaid" id="clusterGraph"></div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Error Timeline</h2>
+                <div class="timeline-container">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Pod Status</h2>
+                <div class="pod-list" id="podList"></div>
+            </div>
+            
+            <div class="section">
+                <h2>Ask Questions</h2>
+                <div class="query-section">
+                    <input type="text" id="queryInput" placeholder="e.g., Which pods are not working properly?">
+                    <button id="queryBtn">Ask</button>
+                </div>
+                <div id="answerBox"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentAnalysisId = null;
+        let timelineChart = null;
+        
+        mermaid.initialize({ startOnLoad: false, theme: 'default' });
+        
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const resultsSection = document.getElementById('resultsSection');
+        const queryInput = document.getElementById('queryInput');
+        const queryBtn = document.getElementById('queryBtn');
+        const answerBox = document.getElementById('answerBox');
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect();
+            }
+        });
+        
+        fileInput.addEventListener('change', handleFileSelect);
+        
+        function handleFileSelect() {
+            const file = fileInput.files[0];
+            if (file && (file.name.endsWith('.tgz') || file.name.endsWith('.tar.gz'))) {
+                analyzeBtn.disabled = false;
+                uploadStatus.innerHTML = `<p>Selected: ${file.name}</p>`;
+            } else {
+                analyzeBtn.disabled = true;
+                uploadStatus.innerHTML = '<p class="error">Please select a .tgz bundle file</p>';
+            }
+        }
+        
+        analyzeBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            
+            analyzeBtn.disabled = true;
+            uploadStatus.innerHTML = '<p class="loading">Analyzing bundle... This may take a while.</p>';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('min_warning_frequency', '3');
+            
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Analysis failed: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                currentAnalysisId = result.analysis_id;
+                
+                uploadStatus.innerHTML = '<p style="color: green;">Analysis completed!</p>';
+                resultsSection.style.display = 'block';
+                
+                await loadResults();
+            } catch (error) {
+                uploadStatus.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                analyzeBtn.disabled = false;
+            }
+        });
+        
+        async function loadResults() {
+            if (!currentAnalysisId) return;
+            
+            try {
+                // Load summary
+                const statusResponse = await fetch(`/api/pods/status?analysis_id=${currentAnalysisId}`);
+                const statusData = await statusResponse.json();
+                displaySummary(statusData.summary);
+                displayPods(statusData.pods);
+                
+                // Load cluster graph
+                const graphResponse = await fetch(`/api/cluster/graph?analysis_id=${currentAnalysisId}`);
+                const graphData = await graphResponse.json();
+                displayClusterGraph(graphData.mermaid_diagram);
+                
+                // Load timeline
+                const timelineResponse = await fetch(`/api/timeline?analysis_id=${currentAnalysisId}`);
+                const timelineData = await timelineResponse.json();
+                displayTimeline(timelineData);
+            } catch (error) {
+                console.error('Error loading results:', error);
+            }
+        }
+        
+        function displaySummary(summary) {
+            const statsContainer = document.getElementById('summaryStats');
+            statsContainer.innerHTML = `
+                <div class="stat-card">
+                    <h3>Total Pods</h3>
+                    <div class="value">${summary.total_pods}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Healthy Pods</h3>
+                    <div class="value">${summary.healthy_pods}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Unhealthy Pods</h3>
+                    <div class="value">${summary.unhealthy_pods}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Root Causes</h3>
+                    <div class="value">${summary.root_causes}</div>
+                </div>
+            `;
+        }
+        
+        function displayClusterGraph(mermaidDiagram) {
+            const graphContainer = document.getElementById('clusterGraph');
+            graphContainer.innerHTML = mermaidDiagram;
+            mermaid.init(undefined, graphContainer);
+        }
+        
+        function displayTimeline(timelineData) {
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+            
+            if (timelineChart) {
+                timelineChart.destroy();
+            }
+            
+            const labels = timelineData.timeline.map(item => {
+                const date = new Date(item.timestamp);
+                return date.toLocaleTimeString();
+            });
+            
+            const errorCounts = {};
+            timelineData.timeline.forEach(item => {
+                errorCounts[item.type] = (errorCounts[item.type] || 0) + 1;
+            });
+            
+            timelineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Errors',
+                        data: timelineData.timeline.map(() => 1),
+                        borderColor: 'rgb(231, 76, 60)',
+                        backgroundColor: 'rgba(231, 76, 60, 0.2)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        function displayPods(pods) {
+            const podList = document.getElementById('podList');
+            podList.innerHTML = pods.map(pod => {
+                const statusClass = pod.healthy ? 'healthy' : (pod.state === 'crashed' ? 'unhealthy' : 'degraded');
+                const statusBadge = pod.healthy ? 'status-healthy' : (pod.state === 'crashed' ? 'status-unhealthy' : 'status-degraded');
+                const statusText = pod.healthy ? 'Healthy' : (pod.state === 'crashed' ? 'Unhealthy' : 'Degraded');
+                
+                return `
+                    <div class="pod-card ${statusClass}">
+                        <h3>${pod.name}</h3>
+                        <p><span class="status-badge ${statusBadge}">${statusText}</span> ${pod.namespace}</p>
+                        ${pod.error_count > 0 ? `<p>Errors: ${pod.error_count}</p>` : ''}
+                        ${pod.restart_count > 0 ? `<p>Restarts: ${pod.restart_count}</p>` : ''}
+                        ${pod.crash_reason ? `<p style="color: #e74c3c;">${pod.crash_reason.substring(0, 100)}...</p>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        queryBtn.addEventListener('click', async () => {
+            const query = queryInput.value.trim();
+            if (!query || !currentAnalysisId) return;
+            
+            queryBtn.disabled = true;
+            answerBox.innerHTML = '<p class="loading">Thinking...</p>';
+            
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        analysis_id: currentAnalysisId,
+                    }),
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Query failed: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                answerBox.innerHTML = `<div class="answer-box"><strong>Q:</strong> ${result.query}<br><br><strong>A:</strong> ${result.answer}</div>`;
+            } catch (error) {
+                answerBox.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            } finally {
+                queryBtn.disabled = false;
+            }
+        });
+        
+        queryInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                queryBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>
+

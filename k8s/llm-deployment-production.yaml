@@ -1,0 +1,219 @@
+# Production deployment for Nemotron-Mini-4B-Instruct-GGUF
+# Optimized for m7i.2xlarge (8 vCPUs) or larger instances
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nemotron-mini-4b-config
+  namespace: log-analysis-aiops
+data:
+  MODEL_URL: "https://huggingface.co/bartowski/Nemotron-Mini-4B-Instruct-GGUF/resolve/main/Nemotron-Mini-4B-Instruct-Q4_K_M.gguf"
+  MODEL_NAME: "Nemotron-Mini-4B-Instruct-Q4_K_M.gguf"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nemotron-mini-4b-model-pvc
+  namespace: log-analysis-aiops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nemotron-mini-4b-gguf-deployment
+  namespace: log-analysis-aiops
+  labels:
+    app: nemotron-mini-4b-gguf
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nemotron-mini-4b-gguf
+  template:
+    metadata:
+      labels:
+        app: nemotron-mini-4b-gguf
+        version: v1
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsNonRoot: true
+
+      initContainers:
+      - name: model-downloader
+        image: curlimages/curl:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          MODEL_PATH="/models/$(MODEL_NAME)"
+          echo "Checking for model at $MODEL_PATH"
+
+          ls -lh /models/ || echo "Directory is empty or inaccessible"
+
+          for file in /models/*; do
+            if [ -f "$file" ]; then
+              echo "Found file: $file"
+              if [ "$file" != "$MODEL_PATH" ]; then
+                echo "Removing file with wrong name: $file"
+                rm -f "$file"
+              elif ! head -c 4 "$file" 2>/dev/null | grep -q "GGUF"; then
+                echo "Removing invalid/corrupted file: $file"
+                rm -f "$file"
+              fi
+            fi
+          done
+
+          if [ -f "$MODEL_PATH" ] && head -c 4 "$MODEL_PATH" 2>/dev/null | grep -q "GGUF"; then
+            echo "✓ Valid GGUF file exists at $MODEL_PATH"
+            ls -lh "$MODEL_PATH"
+            exit 0
+          fi
+
+          echo "Downloading model from $(MODEL_URL)..."
+          curl -L -C - -o "$MODEL_PATH" "$(MODEL_URL)" --progress-bar --fail --max-time 3600
+
+          if [ $? -eq 0 ]; then
+            echo "Download completed"
+            ls -lh "$MODEL_PATH"
+            if head -c 4 "$MODEL_PATH" 2>/dev/null | grep -q "GGUF"; then
+              echo "✓ Valid GGUF file confirmed"
+            else
+              echo "✗ Downloaded file is not a valid GGUF file"
+              exit 1
+            fi
+          else
+            echo "Failed to download model"
+            exit 1
+          fi
+        env:
+        - name: MODEL_URL
+          valueFrom:
+            configMapKeyRef:
+              name: nemotron-mini-4b-config
+              key: MODEL_URL
+        - name: MODEL_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: nemotron-mini-4b-config
+              key: MODEL_NAME
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+
+      containers:
+      - name: llama-cpp-server
+        image: ghcr.io/ggml-org/llama.cpp:server
+        env:
+        - name: MODEL_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: nemotron-mini-4b-config
+              key: MODEL_NAME
+        - name: LLAMA_ARG_MODEL
+          value: "/models/$(MODEL_NAME)"
+        - name: LLAMA_ARG_HOST
+          value: "0.0.0.0"
+        - name: LLAMA_ARG_PORT
+          value: "8000"
+        - name: LLAMA_ARG_CTX_SIZE
+          value: "8192"
+        - name: LLAMA_ARG_THREADS
+          value: "8"
+        - name: LLAMA_ARG_THREADS_BATCH
+          value: "8"
+        - name: LLAMA_ARG_BATCH_SIZE
+          value: "512"
+        - name: LLAMA_ARG_UBATCH_SIZE
+          value: "512"
+        - name: LLAMA_ARG_TEMP
+          value: "0.7"
+        - name: LLAMA_ARG_TOP_K
+          value: "40"
+        - name: LLAMA_ARG_TOP_P
+          value: "0.95"
+        - name: LLAMA_ARG_MIN_P
+          value: "0"
+        - name: LLAMA_ARG_PRESENCE_PENALTY
+          value: "0.1"
+        - name: LLAMA_ARG_FREQUENCY_PENALTY
+          value: "0.3"
+        - name: LLAMA_ARG_JINJA
+          value: "1"
+        - name: LLAMA_ARG_NO_CONTEXT_SHIFT
+          value: "1"
+
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+
+        resources:
+          # Production: For m7i.2xlarge (8 vCPUs) or larger
+          # System overhead: ~0.5-1 CPU
+          # Available: ~7 CPUs, so we request 4 and limit to 6-7
+          requests:
+            memory: "6Gi"
+            cpu: "4"  # Guaranteed 4 CPUs for good performance
+          limits:
+            memory: "8Gi"
+            cpu: "6"  # Can burst to 6 CPUs (leaving 1-2 for system)
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: nemotron-mini-4b-model-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-service
+  namespace: log-analysis-aiops
+  labels:
+    app: nemotron-mini-4b-gguf
+spec:
+  selector:
+    app: nemotron-mini-4b-gguf
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+

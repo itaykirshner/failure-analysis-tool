@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kubernetes-log-analysis-aiops"
+version = "0.1.0"
+description = "AIOps system for analyzing Kubernetes log bundles"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "python-multipart>=0.0.6",
+    "aiofiles>=23.2.0",
+    "llama-cpp-python>=0.2.0",
+    "pyyaml>=6.0.1",
+]
+
+[project.scripts]
+analyze = "src.cli.main:main"
+interactive = "src.cli.interactive:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
