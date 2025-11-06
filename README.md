@@ -1,37 +1,93 @@
-# Kubernetes Log Analysis AIOps System
+# Failure Analysis Tool
 
-Intelligent log analysis system for Kubernetes clusters using troubleshoot.sh support bundles.
+Intelligent log analysis system for Kubernetes clusters that analyzes troubleshoot.sh support bundles to identify issues, root causes, and provide actionable insights.
 
-## Features
+## What It Does
 
-- **Log Bundle Analysis**: Extract and parse troubleshoot.sh support bundles
-- **Intelligent Noise Reduction**: Filter redundant logs and irrelevant warnings
-- **Root Cause Analysis**: Identify root causes and cascading failures
-- **LLM Integration**: Natural language queries and advanced log analysis
-- **Web UI**: Visual cluster representation with timelines and graphs
+- **Analyzes log bundles** from troubleshoot.sh support bundles (.tgz files)
+- **Reduces noise** by deduplicating logs, filtering irrelevant warnings, and clustering similar errors
+- **Identifies root causes** by building dependency graphs and performing temporal correlation
+- **Provides insights** via natural language queries using an LLM
+- **Visualizes cluster health** with dependency graphs, timelines, and pod status overviews
 
-## Installation
+## Architecture
 
-```bash
-pip install -r requirements.txt
+```mermaid
+graph TB
+    User[User] -->|Upload Bundle| API[FastAPI Application]
+    API -->|Extract & Parse| Bundle[Bundle Parser]
+    Bundle -->|Logs & Status| Analyzer[Log Analyzer]
+    Analyzer -->|Noise Reduction| Filter[Noise Reducer]
+    Filter -->|Health Assessment| Health[Pod Health]
+    Health -->|Dependency Graph| RCA[Root Cause Analysis]
+    API -->|Query| LLM[LLM Service]
+    LLM -->|Insights| API
+    API -->|Visualization| UI[Web UI]
+    UI -->|Mermaid Diagrams| User
+    UI -->|Timeline Charts| User
 ```
 
-### LLM Model Setup
+## Quick Start
 
-Download a GGUF model (recommended: Nemotron-Mini-4B-Instruct-Q4_K_M):
+### Prerequisites
 
-```bash
-mkdir -p models
-cd models
-# Download from https://huggingface.co/bartowski/Nemotron-Mini-4B-Instruct-GGUF
-# Recommended: Nemotron-Mini-4B-Instruct-Q4_K_M.gguf (~2.7GB)
-```
+- Python 3.11+
+- Docker (for containerized deployment)
+- Kubernetes cluster (for production)
+- AWS ECR access (for image registry)
+
+### Local Development
+
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Analyze a log bundle:**
+   ```bash
+   python -m src.cli.main bundle.tgz -o ./output -j analysis_result.json
+   ```
+
+3. **Query results (requires LLM model):**
+   ```bash
+   python -m src.cli.interactive analysis_result.json models/Nemotron-Mini-4B-Instruct-Q4_K_M.gguf
+   ```
+
+4. **Run web UI locally:**
+   ```bash
+   uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+   Open http://localhost:8000
+
+### Kubernetes Deployment
+
+1. **Set environment variables:**
+   ```bash
+   export AWS_ACCOUNT_ID="your-account-id"
+   export AWS_REGION="us-east-2"  # Optional, defaults to us-east-2
+   ```
+
+2. **Deploy:**
+   ```bash
+   ./deploy.sh [namespace] [tag]
+   ```
+
+   Example:
+   ```bash
+   ./deploy.sh failure-analysis-tool v0.1
+   ```
+
+3. **Access the application:**
+   ```bash
+   kubectl port-forward service/log-analysis-aiops-service 8000:8000 -n failure-analysis-tool
+   ```
+   Open http://localhost:8000
 
 ## Usage
 
-### Phase 1: CLI Analysis
+### CLI Analysis
 
-Analyze a log bundle:
+Analyze a troubleshoot.sh support bundle:
 
 ```bash
 python -m src.cli.main bundle.tgz -o ./output -j analysis_result.json
@@ -42,61 +98,70 @@ Options:
 - `-j, --json`: Path to output JSON report
 - `--min-warning-frequency`: Minimum frequency for warnings (default: 3)
 
-### Phase 2: Interactive Queries
+### Web UI
 
-Query analysis results using natural language:
+1. Upload a .tgz bundle file
+2. View cluster dependency graph (Mermaid diagram)
+3. Explore error timeline
+4. Check pod health statuses
+5. Ask natural language questions about the analysis
 
-```bash
-python -m src.cli.interactive analysis_result.json models/Nemotron-Mini-4B-Instruct-Q4_K_M.gguf
-```
+### Natural Language Queries
 
-Example queries:
+Examples:
 - "Which pods are not working properly?"
 - "What is the root cause of the db pod crashing?"
 - "Show me connectivity issues"
+- "What errors occurred in the last hour?"
 
-### Phase 3: Web UI
+## Features
 
-Start the FastAPI server:
+### Intelligent Log Analysis
+- Parses diverse log formats (JSON, plain text, multiline stack traces)
+- Extracts timestamps, log levels, and messages from various formats
+- Handles unstructured logs with content-based level inference
 
-```bash
-uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+### Noise Reduction
+- Deduplicates identical log entries
+- Filters irrelevant warnings based on frequency and context
+- Clusters similar errors using template extraction
+- Collapses repeated errors into single entries with counts
+
+### Root Cause Analysis
+- Builds dependency graphs from connectivity issues and service references
+- Performs temporal correlation to identify causal relationships
+- Distinguishes root causes from symptoms
+- Provides confidence scores for root cause identification
+
+## System Requirements
+
+### Development
+- Python 3.11+
+- 4GB+ RAM
+- 5GB+ disk space
+
+### Production (Kubernetes)
+- **Recommended instance:** m7i.2xlarge (8 vCPUs, 32GB RAM)
+- **Minimum instance:** m7i.xlarge (4 vCPUs, 16GB RAM)
+- Persistent volume for LLM model storage (5GB)
+
+## Project Structure
+
 ```
-
-Open http://localhost:8000 in your browser.
-
-Features:
-- Upload and analyze bundles
-- Visual cluster dependency graph (Mermaid)
-- Error timeline visualization
-- Pod status overview
-- Natural language query interface
-
-## Architecture
-
-### Phase 1: CLI Analysis
-- `src/bundle/`: Bundle extraction and parsing
-- `src/analysis/`: Log analysis, noise reduction, root cause detection
-- `src/cli/main.py`: CLI orchestration
-
-### Phase 2: LLM Integration
-- `src/llm/model_loader.py`: GGUF model loading
-- `src/llm/log_analyzer.py`: LLM-based log analysis
-- `src/llm/query_interface.py`: Natural language query processing
-- `src/cli/interactive.py`: Interactive REPL
-
-### Phase 3: Web UI
-- `src/api/main.py`: FastAPI backend
-- `frontend/index.html`: Web interface
-
-## Model Recommendations
-
-For CPU inference, recommended models:
-- **Nemotron-Mini-4B-Instruct-Q4_K_M** (~2.7GB) - Recommended
-- **Qwen2.5-3B-Instruct-GGUF** - Alternative
-- **Phi-3-mini-4k-instruct-GGUF** - Alternative
+fat/
+├── src/
+│   ├── bundle/          # Bundle extraction and parsing
+│   ├── analysis/        # Log analysis, noise reduction, RCA
+│   ├── llm/             # LLM integration and query interface
+│   ├── api/             # FastAPI backend
+│   ├── cli/             # Command-line interface
+│   └── models/          # Pydantic data models
+├── k8s/                 # Kubernetes deployment manifests
+├── frontend/            # Web UI
+├── Dockerfile           # Application container image
+└── deploy.sh            # Deployment script
+```
 
 ## License
 
 MIT
-
