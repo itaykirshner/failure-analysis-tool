@@ -36,6 +36,34 @@ graph TB
 - Kubernetes cluster (for production)
 - AWS ECR access (for image registry)
 
+### kubectl Plugin (Recommended)
+
+The easiest way to analyze bundles is using the kubectl plugin:
+
+1. **Install the plugin:**
+   ```bash
+   # Copy to a directory in your PATH
+   cp kubectl-fat /usr/local/bin/
+   chmod +x /usr/local/bin/kubectl-fat
+   ```
+
+2. **Analyze a bundle:**
+   ```bash
+   kubectl fat bundle.tgz
+   ```
+
+3. **With options:**
+   ```bash
+   kubectl fat bundle.tgz -n my-namespace -o ./results
+   ```
+
+The plugin will:
+- Create a pod with PVC storage
+- Copy your bundle to the pod
+- Run the analysis
+- Copy results back to your local machine
+- Clean up the pod
+
 ### Local Development
 
 1. **Install dependencies:**
@@ -84,6 +112,19 @@ graph TB
    Open http://localhost:8000
 
 ## Usage
+
+### kubectl Plugin
+
+```bash
+kubectl fat <bundle.tgz> [options]
+
+Options:
+  -n, --namespace <namespace>    Kubernetes namespace (default: failure-analysis-tool)
+  -o, --output <path>            Output path for results (default: ./fat-output)
+  --pvc <name>                   PVC name for storage (default: fat-analysis-storage)
+  --image <image>                Container image to use (default: from deployment)
+  -h, --help                     Show help message
+```
 
 ### CLI Analysis
 
@@ -159,7 +200,8 @@ fat/
 ├── k8s/                 # Kubernetes deployment manifests
 ├── frontend/            # Web UI
 ├── Dockerfile           # Application container image
-└── deploy.sh            # Deployment script
+├── deploy.sh            # Deployment script
+└── kubectl-fat          # kubectl plugin
 ```
 
 ## License
